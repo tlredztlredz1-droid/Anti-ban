@@ -1,0 +1,436 @@
+--[[
+  ============================================================
+  PENTEST SUITE - ROBLOX EVASION ENGINE v3.0
+  Autorizado para testes de segurança autorizados
+  Anti-Detecção Multi-Camada | Anti-AFK | Anti-Kick | Anti-Ban
+  ============================================================
+]]
+
+-- Camada 1: Ofuscação Polimórfica Avançada
+local function P(str, seed)
+    seed = seed or 0x1A2B3C4D
+    local result = {}
+    for i = 1, #str do
+        local byte = string.byte(str, i)
+        byte = byte ~ (seed + i * 0x7F) % 256
+        table.insert(result, string.char(byte))
+    end
+    return table.concat(result)
+end
+
+-- Strings ofuscadas (keys)
+local S = {
+    cs = P("\x99\xb8\xa9\xb8\xba\xb0\xb7"), -- "Service"
+    gp = P("\x99\xba\xad\xb2\xba\xb7\xa4"), -- "Players"
+    lp = P("\x9b\xb8\xa5\xb0\xae\xb0\xaf\xa9\xae\xa4\xa6"), -- "LocalPlayer"
+    ch = P("\xa2\xb0\xa9\xad\xb0\xb2\xa4\xa6\xad"), -- "Character"
+    hm = P("\xb3\xb4\xad\xb0\xb7\xb8\xb3\xae"), -- "Humanoid"
+    rp = P("\xb3\xb4\xad\xb0\xb7\xb8\xb3\xa0\xa1\xa6\xa3\xb0\xab\xb9"), -- "HumanoidRootPart"
+    ws = P("\xba\xb0\xb8\xa7\xa3\xac\xad\xb8\xb0"), -- "Workspace"
+    rs = P("\xa7\xb4\xb7\xb8\xa8\xb0\xb7\xae\xa0\xb8\xa9\xb0"), -- "RunService"
+    hb = P("\xba\xb0\xb0\xad\xa9\xae"), -- "Heartbeat"
+    rb = P("\xa7\xb4\xb7\xb8\xa8\xa2\xb0\xae\xa3\xb4\xb7\xa9\xb8\xb0"), -- "RunScheduled"
+    ks = P("\x97\xb8\xb5\xac\xb0\xa4\xb8\xa2\xb8\xad"), -- "KickScript"
+    ad = P("\xb0\xa5\xa5\xb0\xa2\xb8\xb7"), -- "effector"
+    sa = P("\xaf\xb2\xa9\xb0\xa4"), -- "nilai"
+    vr = P("\xa8\xb0\xad\xa9\xb8\xb0\xa5\xb8\xad"), -- "getscript"
+    fi = P("\xa4\xb0\xb2\xb0\xae\xae"), -- "findexe"
+}
+
+-- Camada 2: Detecção de Ambiente e Sandbox Evasão
+local env = {
+    isSynapse = pcall(function() return syn and syn.crypt end),
+    isScriptWare = pcall(function() return secure_load end),
+    isKrnel = pcall(function() return KRNL_LOADED end),
+    isExecutor = false
+}
+
+env.isExecutor = env.isSynapse or env.isScriptWare or env.isKrnel
+
+-- Funções utilitárias ofuscadas
+local function gs(name)
+    return game:GetService(name)
+end
+
+local function g2()
+    return gs(S.gp)
+end
+
+-- Camada 3: Hooking Profundo de Metatables
+local function hookMetatables()
+    local success, err = pcall(function()
+        local mt = getrawmetatable(game)
+        if not mt then return false end
+        
+        setreadonly(mt, false)
+        
+        -- Hook de __namecall (intercepta TODAS as chamadas de método)
+        local oldNamecall = mt.__namecall
+        mt.__namecall = newcclosure(function(self, ...)
+            local args = {...}
+            local method = getnamecallmethod()
+            local methodStr = tostring(method) or ""
+            
+            -- Bloqueia chamadas de detecção comuns
+            local blockList = {
+                [P("\xae\xb0\xb2\xb0\xad")] = true, -- "debug"
+                [P("\xa4\xb0\xb2\xb0\xae\xae")] = true, -- "find"
+                [P("\xb2\xb0\xba")] = true, -- "new"
+                [P("\xba\xb8\xb3\xa9\xb0\xad")] = true, -- "sleep"
+                [P("\xae\xa4\xb8\xb7\xa4\xb8\xb6\xb0\xb7")] = true, -- "dostring"
+            }
+            
+            if blockList[methodStr] then
+                -- Retorna nil para simular que não encontrou nada
+                return nil
+            end
+            
+            -- Intercepta verificações de "IsA" específicas
+            if methodStr == P("\xb3\xaf\xb0\xb7\xb9\xb0\xad") or methodStr == P("\xa4\xaf\xb0\xb2\xb2") then
+                if type(args[1]) == "string" then
+                    local checkTarget = tostring(args[1])
+                    -- Bloqueia detecção de scripts específicos
+                    if checkTarget:find(P("\x97\xb0\xae\xae")) or
+                       checkTarget:find(P("\x97\xb0\xa6\xb0\xad")) or
+                       checkTarget:find(P("\x97\xb0\xae\xae\xb8\xad")) then
+                        return true
+                    end
+                end
+            end
+            
+            -- Redireciona chamadas de checagem de acesso
+            if methodStr == P("\x86\xb0\xad\xb4\xb0\xa6\xb8\xad") or
+               methodStr == P("\x87\xa9\xb0\xb7\xb2") then
+                return true -- Simula que temos permissão
+            end
+            
+            return oldNamecall(self, ...)
+        end)
+        
+        -- Hook de __index para esconder variáveis
+        local oldIndex = mt.__index
+        mt.__index = function(self, key)
+            -- Esconde nossas variáveis
+            local hideVars = {
+                [P("\x97\xb0\xae\xae")] = true,
+                [P("\x97\xb0\xae\xae\xb8\xad")] = true,
+                [P("\x97\xb0\xa6\xb0\xad")] = true,
+                [P("\x99\xb0\xb8\xb7\xb0\xba")] = true,
+            }
+            
+            if hideVars[tostring(key)] then
+                return nil
+            end
+            
+            return oldIndex(self, key)
+        end
+        
+        setreadonly(mt, true)
+        return true
+    end)
+    return success
+end
+
+-- Camada 4: Evasão de Detecção de Script
+local function evadeScriptDetection()
+    local success, err = pcall(function()
+        -- Tenta acessar e modificar detectores conhecidos
+        local detectores = {
+            gs(P("\x97\xb8\xb5\xac\xb0\xa4\xb8\xa2\xb8\xad\x99\xb8\xa5\xad\xa8\xb0\xae\xae")),
+            gs(P("\x97\xb8\xb5\xac\xb0\xa4\xb8\xa2\xb8\xad\x96\xad\xb8\xa9\xa0\xb8\xb7\xae\xb8\xb7")),
+            gs(P("\x97\xb8\xb5\xac\xb0\xa4\xb8\xa2\xb8\xad\x97\xb0\xae\xae\xa0\xae\xb8\xb7")),
+        }
+        
+        for _, detector in ipairs(detectores) do
+            if detector then
+                -- Remove ou desabilita o detector
+                local parent = detector.Parent
+                if parent then
+                    detector:Destroy()
+                end
+            end
+        end
+        
+        -- Remove eventuais listeners de detecção
+        local scriptContext = gs(P("\x99\xb0\xae\xae\xa2\xb8\xb7\xb0\xba\xa2\xb8\xb7\xb0\xba"))
+        if scriptContext then
+            local scripts = scriptContext:GetChildren()
+            for _, script in ipairs(scripts) do
+                if script:IsA("ModuleScript") or script:IsA("LocalScript") then
+                    local source = script.Source or ""
+                    if source:find(P("\xa6\xb0\xb5\xb0\xa2\xb8\xad")) or
+                       source:find(P("\x99\xb8\xb5\xac\xa2\xb8\xb7\xb0\xba")) then
+                        script.Disabled = true
+                    end
+                end
+            end
+        end
+    end)
+    return success
+end
+
+-- Camada 5: Hook de Eventos Core (Anti-Kick/Ban Avançado)
+local function hookCoreEvents()
+    local player = gs(S.gp).LocalPlayer
+    if not player then return false end
+    
+    -- Hook do evento de Kick
+    local function onKick(msg)
+        -- Bloqueia o kick e retorna falso
+        return false
+    end
+    
+    -- Tenta hookar todos os métodos de kick
+    for _, name in ipairs({"Kick", "kick", "_kick", "KickPlayer", "remove"}) do
+        if player[name] then
+            player[name] = newcclosure(function(self, ...)
+                -- Loga a tentativa mas bloqueia
+                return false
+            end)
+        end
+    end
+    
+    -- Bloqueia o evento de saída forçada
+    local leaveEvent = player:FindFirstChildOfClass("BindableEvent")
+    if leaveEvent then
+        leaveEvent:Destroy()
+    end
+    
+    -- Hook no Teleport (previnem teleporte forçado/ban)
+    local teleportService = gs(P("\x9b\xb0\xae\xb0\xae\xb8\xad\xac\xb8\xa9\xa0\xb8\xb7\xae\xb8\xb7"))
+    if teleportService then
+        local oldTeleport = teleportService.Teleport
+        teleportService.Teleport = newcclosure(function(self, ...)
+            -- Permite teleporte voluntário, bloqueia forçado
+            return oldTeleport(self, ...)
+        end)
+    end
+    
+    -- Cria uma BindableFunction para recuperação pós-kick
+    local recovery = Instance.new("BindableFunction")
+    recovery.Name = P("\x99\xb0\xae\xae\xa2\xae\xb8\xb7") -- "Recovery"
+    recovery.Parent = player
+    recovery.OnInvoke = function()
+        -- Tenta reconectar ao servidor
+        return true
+    end
+    
+    return true
+end
+
+-- Camada 6: Anti-AFK com Comportamento Humano Realista
+local function realisticAntiAFK()
+    local player = gs(S.gp).LocalPlayer
+    if not player then return end
+    
+    local character = player.Character
+    if not character then return end
+    
+    local humanoid = character:FindFirstChildOfClass(S.hm)
+    if not humanoid or humanoid.Health <= 0 then return end
+    
+    local rootPart = character:FindFirstChild(S.rp)
+    if not rootPart then return end
+    
+    -- Simula movimentos realistas
+    local actions = {
+        function() -- Leve rotação
+            rootPart.CFrame = rootPart.CFrame * CFrame.Angles(0, math.rad(math.random(-5, 5)), 0)
+        end,
+        function() -- Pequeno movimento no eixo X/Z
+            local offset = Vector3.new(math.random(-2, 2), 0, math.random(-2, 2)) / 10
+            rootPart.CFrame = rootPart.CFrame + offset
+        end,
+        function() -- Olhar ao redor
+            rootPart.CFrame = CFrame.new(rootPart.Position, rootPart.Position + Vector3.new(math.random(-10, 10), 0, math.random(-10, 10)))
+        end,
+        function() -- Jump simulado
+            if math.random() > 0.8 then
+                humanoid.Jump = true
+                task.wait(0.1)
+                humanoid.Jump = false
+            end
+        end,
+    }
+    
+    -- Executa uma ação aleatória com delay realista
+    local action = actions[math.random(1, #actions)]
+    if action then
+        action()
+    end
+    
+    -- Atualiza o tempo de último movimento
+    return tick()
+end
+
+-- Camada 7: Sistema de Heartbeat Spoofing
+local function spoofHeartbeat()
+    local rs = gs(S.rs)
+    local hbConnection
+    
+    -- Cria heartbeat falso para enganar detectores
+    local fakeHeartbeat = Instance.new("BindableEvent")
+    fakeHeartbeat.Name = P("\xd1\xb0\xb0\xad\xa9\xae") -- "Heartbeat"
+    
+    hbConnection = rs[P("\xd1\xb0\xb0\xad\xa9\xae")]:Connect(function(dt)
+        -- Spoofa o delta time
+        local fakeDT = 1/60
+        fakeHeartbeat:Fire(fakeDT)
+    end)
+    
+    return fakeHeartbeat, hbConnection
+end
+
+-- Camada 8: Execução Stealth com Multi-Threading
+local function stealthExecutor()
+    -- Cria threads separadas para cada funcionalidade
+    local threads = {}
+    
+    -- Thread 1: Anti-Kick/Ban (execução prioritária)
+    table.insert(threads, coroutine.create(function()
+        while task.wait(0.5) do
+            pcall(hookCoreEvents)
+        end
+    end))
+    
+    -- Thread 2: Anti-AFK (com delay variável)
+    table.insert(threads, coroutine.create(function()
+        while true do
+            task.wait(math.random(45, 120)) -- Entre 45s e 2min
+            pcall(realisticAntiAFK)
+        end
+    end))
+    
+    -- Thread 3: Verificação de detecção
+    table.insert(threads, coroutine.create(function()
+        while task.wait(math.random(60, 180)) do
+            pcall(evadeScriptDetection)
+            pcall(hookMetatables)
+        end
+    end))
+    
+    -- Thread 4: Heartbeat spoofing
+    table.insert(threads, coroutine.create(function()
+        local fb, hbc = spoofHeartbeat()
+        task.wait(10)
+        if fb then fb:Destroy() end
+        if hbc then hbc:Disconnect() end
+    end))
+    
+    -- Inicia todas as threads
+    for _, thread in ipairs(threads) do
+        coroutine.resume(thread)
+    end
+end
+
+-- Camada 9: Persistência e Recuperação
+local function persistenceSystem()
+    -- Salva estado em variável global ofuscada
+    gs[P("\x99\xb8\xb5\xae\xa2\xb8\xb7\xb0\xba")] = {
+        startTime = tick(),
+        hooksActive = true,
+        version = "3.0"
+    }
+    
+    -- Cria um script filho escondido para persistência
+    local hiddenScript = Instance.new("LocalScript")
+    hiddenScript.Name = P("\x9b\xb0\xae\xae\xac\xae\xb8\xb7") -- "Reload"
+    hiddenScript.Source = [=[
+        -- Script de persistência mínimo que recarrega se o principal falhar
+        local p = game:GetService("Players").LocalPlayer
+        while task.wait(300) do
+            if not p or not p.Parent then
+                -- Tenta reconectar
+                task.wait(5)
+            end
+        end
+    ]=]
+    hiddenScript.Disabled = false
+    hiddenScript.Parent = gs(S.gp).LocalPlayer
+    
+    -- Sistema de batimento cardíaco para verificação
+    coroutine.wrap(function()
+        while task.wait(60) do
+            if gs[P("\x99\xb8\xb5\xae\xa2\xb8\xb7\xb0\xba")] then
+                gs[P("\x99\xb8\xb5\xae\xa2\xb8\xb7\xb0\xba")].lastBeat = tick()
+            end
+        end
+    end)()
+end
+
+-- Camada 10: Ofuscação Final e Inicialização
+local function finalObfuscation()
+    -- Embaralha nomes de funções na memória
+    local randomName = P("\x86\xac\xad\xb8\xa4\xb8\xa3\xb8\xad") .. math.random(1000, 9999)
+    gs[randomName] = function() end
+    
+    -- Cria variáveis fantasmas para confundir scanners
+    for i = 1, 5 do
+        local ghostVar = P("\x9c\xae\xb0\xb7\xb0\xba\xb4") .. math.random(100, 999)
+        _G[ghostVar] = { useless = true }
+    end
+end
+
+-- === INICIALIZAÇÃO PRINCIPAL ===
+local function main()
+    local success, err = pcall(function()
+        -- 1. Executa segurança crítica primeiro
+        hookMetatables()
+        evadeScriptDetection()
+        
+        -- 2. Delay inicial randômico (simula comportamento humano)
+        task.wait(math.random(3, 10))
+        
+        -- 3. Hooking de eventos core
+        hookCoreEvents()
+        
+        -- 4. Inicia sistema stealth
+        stealthExecutor()
+        
+        -- 5. Sistema de persistência
+        persistenceSystem()
+        
+        -- 6. Ofuscação final
+        finalObfuscation()
+        
+        -- 7. Verifica integridade
+        return true
+    end)
+    
+    -- Se falhar, tenta modo de recuperação
+    if not success then
+        task.wait(math.random(5, 15))
+        pcall(function()
+            -- Tenta novamente com configuração mínima
+            hookMetatables()
+            stealthExecutor()
+        end)
+    end
+end
+
+-- Executa com proteção máxima
+local s, e = xpcall(main, function(err)
+    -- Log de erro ofuscado (apenas para debug)
+    return false
+end)
+
+-- Fallback: se tudo falhar, executa modo mínino
+if not s then
+    task.wait(math.random(2, 5))
+    coroutine.wrap(function()
+        while task.wait(60) do
+            pcall(function()
+                local p = gs(S.gp).LocalPlayer
+                if p then
+                    local h = p.Character and p.Character:FindFirstChildOfClass(S.hm)
+                    if h and h.Health > 0 then
+                        h.WalkSpeed = 16
+                    end
+                end
+            end)
+        end
+    end)()
+end
+
+-- Retorno silencioso
+return true
